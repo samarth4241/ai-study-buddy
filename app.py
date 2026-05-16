@@ -36,7 +36,6 @@ else:
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
         st.image(image, caption="Uploaded Image Preview", use_container_width=True)
-        # Rewind file pointer to read it for base64 encoding
         uploaded_file.seek(0)
         image_base64 = encode_image(uploaded_file)
 
@@ -49,7 +48,7 @@ if st.button("Magic Happen! ✨"):
     elif input_type == "Upload Picture of Notes 📷" and image_base64 is None:
         st.warning("Please upload an image first.")
     else:
-        with st.spinner("Analyzing with Meta Llama AI..."):
+        with st.spinner("Analyzing with OpenRouter Free AI..."):
             
             # Setup task instruction based on selection
             if option == "Summarize Notes":
@@ -64,10 +63,10 @@ if st.button("Magic Happen! ✨"):
                 "Content-Type": "application/json"
             }
 
-            # If it's text input, use standard text completion
+            # If it's text input
             if input_type == "Type/Paste Text":
                 json_data = {
-                    "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+                    "model": "openrouter/free",
                     "messages": [
                         {
                             "role": "user",
@@ -75,10 +74,10 @@ if st.button("Magic Happen! ✨"):
                         }
                     ]
                 }
-            # If it's an image input, send it to the vision model
+            # If it's an image input
             else:
                 json_data = {
-                    "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+                    "model": "openrouter/free",
                     "messages": [
                         {
                             "role": "user",
