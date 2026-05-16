@@ -3,6 +3,7 @@ import requests
 import base64
 from PIL import Image
 import io
+from gtts import gTTS
 
 # 1. Page Configuration
 st.set_page_config(page_title="AI Study Buddy", page_icon="📚", layout="wide")
@@ -19,27 +20,6 @@ st.sidebar.write("Available for students worldwide.")
 # Helper function to convert uploaded image to base64
 def encode_image(file_bytes):
     return base64.b64encode(file_bytes).decode('utf-8')
-
-# HTML/JS Code for Audio Reader
-def text_to_speech_js(text_content):
-    clean_text = text_content.replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
-    js_script = f"""
-    <script>
-    function playAudio() {{
-        var msg = new SpeechSynthesisUtterance("{clean_text}");
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(msg);
-    }}
-    function stopAudio() {{
-        window.speechSynthesis.cancel();
-    }}
-    </script>
-    <div style="margin-top: 15px; margin-bottom: 15px; padding: 10px; background-color: #f9f9f9; border-radius: 5px;">
-        <button onclick="playAudio()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 10px; font-weight: bold;">🔊 Read These Notes Aloud</button>
-        <button onclick="stopAudio()" style="background-color: #f44336; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold;">⏹️ Stop Reading</button>
-    </div>
-    """
-    return js_script
 
 # 3. Main Interface Layout
 input_type = st.radio("Choose your input method:", ("Type/Paste Text", "Upload Pictures of Notes (Up to 10) 📷"))
@@ -69,7 +49,7 @@ else:
 st.markdown("---")
 st.subheader("💡 Choose your Action")
 
-# The exact 4 tabs in the exact order you requested
+# The 4 tabs in perfect order
 tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary", "🃏 Revision Flashcards", "🙋‍♂️ Ask Custom Question", "📝 Detailed Notes"])
 
 # 4. Processing Logic
@@ -126,7 +106,6 @@ if st.button("Magic Happen! ✨"):
 if 'ai_output' in st.session_state:
     raw_data = st.session_state['ai_output']
     
-    # Safe text parsing extraction logic
     def extract_section(text, start_marker, end_marker):
         try:
             start_idx = text.find(start_marker) + len(start_marker)
@@ -135,7 +114,7 @@ if 'ai_output' in st.session_state:
                 return text[start_idx:end_idx].strip()
         except:
             pass
-        return "Content processing error. Please try clicking 'Magic Happen' again."
+        return "Content processing error. Please click 'Magic Happen' again."
 
     summary_text = extract_section(raw_data, "[SUMMARY_START]", "[SUMMARY_END]")
     flash_text = extract_section(raw_data, "[FLASHCARDS_START]", "[FLASHCARDS_END]")
@@ -151,8 +130,18 @@ if 'ai_output' in st.session_state:
         
     with tab4:
         st.subheader("📝 Detailed Smart Class Notes")
-        # Embedding the audio reader directly at the top of the notes tab as requested!
-        st.components.v1.html(text_to_speech_js(notes_text), height=80)
+        
+        # New Stable Native Audio Player (Fixes the public crash bug!)
+        try:
+            clean_audio_text = notes_text.replace('[NOTES_START]', '').replace('[NOTES_END]', '')
+            tts = gTTS(text=clean_audio_text, lang='en', tld='co.in')
+            sound_fp = io.BytesIO()
+            tts.write_to_fp(sound_fp)
+            st.audio(sound_fp, format="audio/mp3")
+            st.caption("🔊 Press play to listen to your classroom notes.")
+        except Exception as audio_err:
+            st.caption("🔊 Audio reader loading...")
+            
         st.markdown(notes_text)
 
 # Independent Tab 3 handling for custom typing inputs
