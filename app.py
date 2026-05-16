@@ -20,24 +20,23 @@ st.sidebar.write("Available for students worldwide.")
 def encode_image(file_bytes):
     return base64.b64encode(file_bytes).decode('utf-8')
 
-# HTML/JS Code for Browser-Native Text to Speech (No external libraries required)
+# HTML/JS Code for Audio Reader
 def text_to_speech_js(text_content):
-    # Clean up text so it doesn't break JavaScript strings
-    clean_text = text_content.replace('"', '\\"').replace('\n', ' ')
+    clean_text = text_content.replace('"', '\\"').replace('\n', ' ').replace('\r', ' ')
     js_script = f"""
     <script>
     function playAudio() {{
         var msg = new SpeechSynthesisUtterance("{clean_text}");
-        window.speechSynthesis.cancel(); // Stop any ongoing speech
+        window.speechSynthesis.cancel();
         window.speechSynthesis.speak(msg);
     }}
     function stopAudio() {{
         window.speechSynthesis.cancel();
     }}
     </script>
-    <div style="margin-bottom: 20px;">
-        <button onclick="playAudio()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px;">🔊 Read Notes Aloud</button>
-        <button onclick="stopAudio()" style="background-color: #f44336; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">⏹️ Stop Reading</button>
+    <div style="margin-top: 15px; margin-bottom: 15px; padding: 10px; background-color: #f9f9f9; border-radius: 5px;">
+        <button onclick="playAudio()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 10px; font-weight: bold;">🔊 Read These Notes Aloud</button>
+        <button onclick="stopAudio()" style="background-color: #f44336; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold;">⏹️ Stop Reading</button>
     </div>
     """
     return js_script
@@ -70,8 +69,8 @@ else:
 st.markdown("---")
 st.subheader("💡 Choose your Action")
 
-# Tabs let you switch views cleanly after the AI generates the data
-tab1, tab2, tab3, tab4 = st.tabs(["📋 Quick Summary & Notes", "🃏 Revision Flashcards", "🙋‍♂️ Ask Custom Question", "🔊 Audio Reader"])
+# The exact 4 tabs in the exact order you requested
+tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary", "🃏 Revision Flashcards", "🙋‍♂️ Ask Custom Question", "📝 Detailed Notes"])
 
 # 4. Processing Logic
 if st.button("Magic Happen! ✨"):
@@ -84,17 +83,12 @@ if st.button("Magic Happen! ✨"):
     else:
         with st.spinner("Analyzing your materials with Meta Llama AI..."):
             
-            # Massive single prompt that tells the AI to create EVERYTHING in one shot
             master_instruction = (
                 "Act as an expert elite tutor. Analyze the given materials perfectly and create a comprehensive master study suite. "
-                "Your response MUST contain exactly these four clearly marked sections using the exact headers below:\n\n"
-                "===QUICK_SUMMARY===\n"
-                "Provide a brief, 3-bullet point quick executive summary of the topic.\n\n"
-                "===DETAILED_NOTES===\n"
-                "Provide comprehensive, deep classroom notes in premium batch style (like Physics Wallah notes). Expand on every technical concept, break down complex definitions, list step-by-step formulas, and include an 'Exam Tips/Common Pitfalls' section.\n\n"
-                "===FLASHCARDS===\n"
-                "Create 6 high-yield, effective Question and Answer revision flashcards based on the text.\n\n"
-                "Provide all output cleanly."
+                "Your response MUST split the content explicitly using these exact markers:\n\n"
+                "[SUMMARY_START]\n(Provide a brief, 3-bullet point quick summary here)\n[SUMMARY_END]\n\n"
+                "[FLASHCARDS_START]\n(Create 6 high-yield Question and Answer revision flashcards here)\n[FLASHCARDS_END]\n\n"
+                "[NOTES_START]\n(Provide comprehensive, deep classroom notes in premium batch style like Physics Wallah notes. Expand on every concept, definition, and formula step-by-step)\n[NOTES_END]"
             )
 
             headers = {
@@ -121,55 +115,47 @@ if st.button("Magic Happen! ✨"):
                 response_json = response.json()
                 
                 if 'choices' in response_json:
-                    raw_result = response_json['choices'][0]['message']['content']
-                    
-                    # Store the result in session state so it doesn't vanish
-                    st.session_state['ai_output'] = raw_result
-                    st.success("Analysis Complete! Click the tabs above to explore your custom study materials.")
-                    
+                    st.session_state['ai_output'] = response_json['choices'][0]['message']['content']
+                    st.success("Analysis Complete! Click through the tabs below to view your materials.")
                 elif 'error' in response_json:
                     st.error(f"API Error: {response_json['error']['message']}")
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
 
-# 5. Distribute the Output into Tabs if it exists
+# 5. Extract and display data cleanly into your 4 tabs
 if 'ai_output' in st.session_state:
     raw_data = st.session_state['ai_output']
     
-    # Simple splitting logic based on custom markers
-    parts = raw_data.split("===")
-    
-    summary_content = "Process data to view summary."
-    notes_content = "Process data to view detailed notes."
-    flashcards_content = "Process data to view revision flashcards."
-    
-    for part in parts:
-        if part.startswith("QUICK_SUMMARY"):
-            summary_content = part.replace("QUICK_SUMMARY===\n", "")
-        elif part.startswith("DETAILED_NOTES"):
-            notes_content = part.replace("DETAILED_NOTES===\n", "")
-        elif part.startswith("FLASHCARDS"):
-            flashcards_content = part.replace("FLASHCARDS===\n", "")
-            
+    # Safe text parsing extraction logic
+    def extract_section(text, start_marker, end_marker):
+        try:
+            start_idx = text.find(start_marker) + len(start_marker)
+            end_idx = text.find(end_marker)
+            if start_idx != -1 and end_idx != -1:
+                return text[start_idx:end_idx].strip()
+        except:
+            pass
+        return "Content processing error. Please try clicking 'Magic Happen' again."
+
+    summary_text = extract_section(raw_data, "[SUMMARY_START]", "[SUMMARY_END]")
+    flash_text = extract_section(raw_data, "[FLASHCARDS_START]", "[FLASHCARDS_END]")
+    notes_text = extract_section(raw_data, "[NOTES_START]", "[NOTES_END]")
+
     with tab1:
         st.subheader("📋 Quick Executive Summary")
-        st.markdown(summary_content)
-        st.markdown("---")
-        st.subheader("📝 Detailed Smart Class Notes")
-        st.markdown(notes_content)
+        st.markdown(summary_text)
         
     with tab2:
         st.subheader("🃏 Smart Revision Flashcards")
-        st.markdown(flashcards_content)
+        st.markdown(flash_text)
         
     with tab4:
-        st.subheader("🔊 Smart Note Audio Reader")
-        st.write("Click below to have the AI voice read through your comprehensive smart notes aloud:")
-        # Combine summary and notes text for reading
-        audio_text = f"Summary: {summary_content}. Detailed Notes: {notes_content}"
-        st.components.v1.html(text_to_speech_js(audio_text), height=100)
+        st.subheader("📝 Detailed Smart Class Notes")
+        # Embedding the audio reader directly at the top of the notes tab as requested!
+        st.components.v1.html(text_to_speech_js(notes_text), height=80)
+        st.markdown(notes_text)
 
-# Separate handling for Custom Live Questions (Tab 3) so it stays independent
+# Independent Tab 3 handling for custom typing inputs
 with tab3:
     st.subheader("🙋‍♂️ Ask an Independent Question")
     custom_q = st.text_input("Got a specific doubt? Ask here:")
