@@ -1,1 +1,192 @@
+import streamlit as st
+import requests
+import base64
+from PIL import Image
+import io
 
+# 1. Page Configuration
+st.set_page_config(page_title="AI Study Buddy", page_icon="📚", layout="wide")
+st.title("📚 AI Study Buddy & Note Architect")
+st.markdown("---")
+
+# 2. Permanent Sidebar Credits
+st.sidebar.header("Settings")
+api_key = st.sidebar.text_input("Enter OpenRouter API Key", type="password")
+st.sidebar.markdown("---")
+st.sidebar.subheader("👑 Created by Samarth")
+st.sidebar.write("Available for students worldwide.")
+
+# Helper function to convert uploaded image to base64
+def encode_image(file_bytes):
+    return base64.b64encode(file_bytes).decode('utf-8')
+
+# HTML/JS Code for Browser-Native Text to Speech (No external libraries required)
+def text_to_speech_js(text_content):
+    # Clean up text so it doesn't break JavaScript strings
+    clean_text = text_content.replace('"', '\\"').replace('\n', ' ')
+    js_script = f"""
+    <script>
+    function playAudio() {{
+        var msg = new SpeechSynthesisUtterance("{clean_text}");
+        window.speechSynthesis.cancel(); // Stop any ongoing speech
+        window.speechSynthesis.speak(msg);
+    }}
+    function stopAudio() {{
+        window.speechSynthesis.cancel();
+    }}
+    </script>
+    <div style="margin-bottom: 20px;">
+        <button onclick="playAudio()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-right: 10px;">🔊 Read Notes Aloud</button>
+        <button onclick="stopAudio()" style="background-color: #f44336; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">⏹️ Stop Reading</button>
+    </div>
+    """
+    return js_script
+
+# 3. Main Interface Layout
+input_type = st.radio("Choose your input method:", ("Type/Paste Text", "Upload Pictures of Notes (Up to 10) 📷"))
+
+user_text = ""
+uploaded_images_b64 = []
+
+if input_type == "Type/Paste Text":
+    user_text = st.text_area("Paste your textbook text or notes here:", height=150)
+else:
+    uploaded_files = st.file_uploader(
+        "Choose pictures of your notes or textbook pages (Max 10)...", 
+        type=["jpg", "jpeg", "png"], 
+        accept_multiple_files=True
+    )
+    
+    if uploaded_files:
+        st.write(f"📸 Uploaded {len(uploaded_files)} images:")
+        cols = st.columns(2)
+        for index, uploaded_file in enumerate(uploaded_files[:10]):
+            file_bytes = uploaded_file.read()
+            image = Image.open(io.BytesIO(file_bytes))
+            with cols[index % 2]:
+                st.image(image, caption=f"Uploaded Page {index + 1}", width=350)
+            uploaded_images_b64.append(encode_image(file_bytes))
+
+st.markdown("---")
+st.subheader("💡 Choose your Action")
+
+# Tabs let you switch views cleanly after the AI generates the data
+tab1, tab2, tab3, tab4 = st.tabs(["📋 Quick Summary & Notes", "🃏 Revision Flashcards", "🙋‍♂️ Ask Custom Question", "🔊 Audio Reader"])
+
+# 4. Processing Logic
+if st.button("Magic Happen! ✨"):
+    if not api_key:
+        st.error("Please enter your OpenRouter API Key in the sidebar!")
+    elif input_type == "Type/Paste Text" and not user_text:
+        st.warning("Please paste some text first.")
+    elif input_type == "Upload Pictures of Notes (Up to 10) 📷" and not uploaded_images_b64:
+        st.warning("Please upload at least one image first.")
+    else:
+        with st.spinner("Analyzing your materials with Meta Llama AI..."):
+            
+            # Massive single prompt that tells the AI to create EVERYTHING in one shot
+            master_instruction = (
+                "Act as an expert elite tutor. Analyze the given materials perfectly and create a comprehensive master study suite. "
+                "Your response MUST contain exactly these four clearly marked sections using the exact headers below:\n\n"
+                "===QUICK_SUMMARY===\n"
+                "Provide a brief, 3-bullet point quick executive summary of the topic.\n\n"
+                "===DETAILED_NOTES===\n"
+                "Provide comprehensive, deep classroom notes in premium batch style (like Physics Wallah notes). Expand on every technical concept, break down complex definitions, list step-by-step formulas, and include an 'Exam Tips/Common Pitfalls' section.\n\n"
+                "===FLASHCARDS===\n"
+                "Create 6 high-yield, effective Question and Answer revision flashcards based on the text.\n\n"
+                "Provide all output cleanly."
+            )
+
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+
+            if input_type == "Type/Paste Text":
+                json_data = {
+                    "model": "openrouter/free",
+                    "messages": [{"role": "user", "content": f"{master_instruction}\n\nContent:\n{user_text}"}]
+                }
+            else:
+                content_list = [{"type": "text", "text": master_instruction}]
+                for img_b64 in uploaded_images_b64:
+                    content_list.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}})
+                json_data = {
+                    "model": "openrouter/free",
+                    "messages": [{"role": "user", "content": content_list}]
+                }
+
+            try:
+                response = requests.post(url="https://openrouter.ai/api/v1/chat/completions", headers=headers, json=json_data)
+                response_json = response.json()
+                
+                if 'choices' in response_json:
+                    raw_result = response_json['choices'][0]['message']['content']
+                    
+                    # Store the result in session state so it doesn't vanish
+                    st.session_state['ai_output'] = raw_result
+                    st.success("Analysis Complete! Click the tabs above to explore your custom study materials.")
+                    
+                elif 'error' in response_json:
+                    st.error(f"API Error: {response_json['error']['message']}")
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+
+# 5. Distribute the Output into Tabs if it exists
+if 'ai_output' in st.session_state:
+    raw_data = st.session_state['ai_output']
+    
+    # Simple splitting logic based on custom markers
+    parts = raw_data.split("===")
+    
+    summary_content = "Process data to view summary."
+    notes_content = "Process data to view detailed notes."
+    flashcards_content = "Process data to view revision flashcards."
+    
+    for part in parts:
+        if part.startswith("QUICK_SUMMARY"):
+            summary_content = part.replace("QUICK_SUMMARY===\n", "")
+        elif part.startswith("DETAILED_NOTES"):
+            notes_content = part.replace("DETAILED_NOTES===\n", "")
+        elif part.startswith("FLASHCARDS"):
+            flashcards_content = part.replace("FLASHCARDS===\n", "")
+            
+    with tab1:
+        st.subheader("📋 Quick Executive Summary")
+        st.markdown(summary_content)
+        st.markdown("---")
+        st.subheader("📝 Detailed Smart Class Notes")
+        st.markdown(notes_content)
+        
+    with tab2:
+        st.subheader("🃏 Smart Revision Flashcards")
+        st.markdown(flashcards_content)
+        
+    with tab4:
+        st.subheader("🔊 Smart Note Audio Reader")
+        st.write("Click below to have the AI voice read through your comprehensive smart notes aloud:")
+        # Combine summary and notes text for reading
+        audio_text = f"Summary: {summary_content}. Detailed Notes: {notes_content}"
+        st.components.v1.html(text_to_speech_js(audio_text), height=100)
+
+# Separate handling for Custom Live Questions (Tab 3) so it stays independent
+with tab3:
+    st.subheader("🙋‍♂️ Ask an Independent Question")
+    custom_q = st.text_input("Got a specific doubt? Ask here:")
+    if st.button("Ask AI Tutor 🧠"):
+        if not api_key:
+            st.error("Please insert your key in the sidebar first.")
+        elif not custom_q:
+            st.warning("Please type a question.")
+        else:
+            with st.spinner("Tutor is answering..."):
+                try:
+                    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                    q_json = {
+                        "model": "openrouter/free",
+                        "messages": [{"role": "user", "content": f"Answer this student doubt thoroughly as a supportive teacher: {custom_q}"}]
+                    }
+                    q_res = requests.post(url="https://openrouter.ai/api/v1/chat/completions", headers=headers, json=q_json).json()
+                    st.info(q_res['choices'][0]['message']['content'])
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
