@@ -10,16 +10,22 @@ st.set_page_config(page_title="AI Study Buddy", page_icon="📚", layout="wide")
 st.title("📚 AI Study Buddy & Note Architect")
 st.markdown("---")
 
-# 2. Permanent Sidebar Credits
-st.sidebar.header("Settings")
-api_key = st.sidebar.text_input("Enter OpenRouter API Key", type="password")
-st.sidebar.markdown("---")
+# 2. Permanent Sidebar Credits (API input box removed!)
 st.sidebar.subheader("👑 Created by Samarth")
 st.sidebar.write("Available for students worldwide.")
+st.sidebar.markdown("---")
+st.sidebar.write("⚡ Powered by Meta Llama AI via OpenRouter Cloud.")
 
 # Helper function to convert uploaded image to base64
 def encode_image(file_bytes):
     return base64.b64encode(file_bytes).decode('utf-8')
+
+# Retrieve the hidden API key automatically from Streamlit Secrets
+try:
+    api_key = st.secrets["OPENROUTER_API_KEY"]
+except Exception:
+    st.error("🔑 Security configuration error: API Key not found in Streamlit Secrets!")
+    st.stop()
 
 # 3. Main Interface Layout
 input_type = st.radio("Choose your input method:", ("Type/Paste Text", "Upload Pictures of Notes (Up to 10) 📷"))
@@ -54,9 +60,7 @@ tab1, tab2, tab3, tab4 = st.tabs(["📋 Summary", "🃏 Revision Flashcards", "�
 
 # 4. Processing Logic
 if st.button("Magic Happen! ✨"):
-    if not api_key:
-        st.error("Please enter your OpenRouter API Key in the sidebar!")
-    elif input_type == "Type/Paste Text" and not user_text:
+    if input_type == "Type/Paste Text" and not user_text:
         st.warning("Please paste some text first.")
     elif input_type == "Upload Pictures of Notes (Up to 10) 📷" and not uploaded_images_b64:
         st.warning("Please upload at least one image first.")
@@ -131,7 +135,6 @@ if 'ai_output' in st.session_state:
     with tab4:
         st.subheader("📝 Detailed Smart Class Notes")
         
-        # New Stable Native Audio Player (Fixes the public crash bug!)
         try:
             clean_audio_text = notes_text.replace('[NOTES_START]', '').replace('[NOTES_END]', '')
             tts = gTTS(text=clean_audio_text, lang='en', tld='co.in')
@@ -149,19 +152,14 @@ with tab3:
     st.subheader("🙋‍♂️ Ask an Independent Question")
     custom_q = st.text_input("Got a specific doubt? Ask here:")
     if st.button("Ask AI Tutor 🧠"):
-        if not api_key:
-            st.error("Please insert your key in the sidebar first.")
-        elif not custom_q:
-            st.warning("Please type a question.")
-        else:
-            with st.spinner("Tutor is answering..."):
-                try:
-                    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                    q_json = {
-                        "model": "openrouter/free",
-                        "messages": [{"role": "user", "content": f"Answer this student doubt thoroughly as a supportive teacher: {custom_q}"}]
-                    }
-                    q_res = requests.post(url="https://openrouter.ai/api/v1/chat/completions", headers=headers, json=q_json).json()
-                    st.info(q_res['choices'][0]['message']['content'])
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
+        with st.spinner("Tutor is answering..."):
+            try:
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                q_json = {
+                    "model": "openrouter/free",
+                    "messages": [{"role": "user", "content": f"Answer this student doubt thoroughly as a supportive teacher: {custom_q}"}]
+                }
+                q_res = requests.post(url="https://openrouter.ai/api/v1/chat/completions", headers=headers, json=q_json).json()
+                st.info(q_res['choices'][0]['message']['content'])
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
